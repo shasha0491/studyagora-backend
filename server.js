@@ -7,17 +7,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ─────────────────────────────
+// --------------------
 // Health Check
-// ─────────────────────────────
+// --------------------
 app.get("/", (req, res) => {
   res.send("StudyAgora backend running 🚀");
 });
 
-// ─────────────────────────────
-// Helper: Safe Groq Call
-// ─────────────────────────────
-async function callGroq(prompt, maxTokens = 1000, temperature = 0.5) {
+// --------------------
+// Helper: Groq Call (SAFE)
+// --------------------
+async function callGroq(prompt, maxTokens = 1200, temperature = 0.6) {
   const response = await fetch(
     "https://api.groq.com/openai/v1/chat/completions",
     {
@@ -35,66 +35,35 @@ async function callGroq(prompt, maxTokens = 1000, temperature = 0.5) {
     }
   );
 
+  const text = await response.text();
+
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error("Groq HTTP error: " + text);
+    throw new Error(text);
   }
 
-  const data = await response.json();
+  const data = JSON.parse(text);
 
-  // 🔐 SAFETY CHECK
-  if (!data.choices || !Array.isArray(data.choices) || !data.choices[0]) {
-    throw new Error("Invalid Groq response: " + JSON.stringify(data));
+  if (!data.choices || !data.choices[0]?.message?.content) {
+    throw new Error("Invalid Groq response: " + text);
   }
 
-  return data.choices[0].message?.content || "No content generated.";
+  return data.choices[0].message.content;
 }
 
-// ─────────────────────────────
-// Answer Evaluator
-// ─────────────────────────────
-app.post("/evaluate", async (req, res) => {
-  try {
-    const { paper, subject, marks, question, answer } = req.body;
-
-    if (!question || !answer) {
-      return res.status(400).json({ error: "Missing fields" });
-    }
-
-    const prompt = `
-You are a strict UPSC examiner.
-
-Paper: ${paper || "N/A"}
-Subject: ${subject || "N/A"}
-Marks: ${marks || "N/A"}
-
-Question:
-${question}
-
-Answer:
-${answer}
-
-Evaluate strictly and give feedback with marks.
-`;
-
-    const evaluation = await callGroq(prompt, 1000, 0.4);
-    res.json({ evaluation });
-
-  } catch (err) {
-    console.error("EVALUATE ERROR:", err.message);
-    res.status(500).json({ error: "Evaluation failed" });
-  }
-});
-
-// ─────────────────────────────
-// Quiz Generator
-// ─────────────────────────────
+// --------------------
+// QUIZ GENERATOR
+// --------------------
 app.post("/quiz", async (req, res) => {
   try {
+    console.log("QUIZ BODY:", req.body);
+
     const { subject, difficulty, count } = req.body;
 
     if (!subject || !difficulty || !count) {
-      return res.status(400).json({ error: "Missing fields" });
+      return res.status(400).json({
+        error: "Missing fields",
+        received: req.body
+      });
     }
 
     const prompt = `
@@ -103,7 +72,7 @@ Generate ${count} UPSC Prelims MCQs.
 Subject: ${subject}
 Difficulty: ${difficulty}
 
-Format strictly:
+Strict format:
 
 Q1. Question
 A) Option
@@ -114,18 +83,22 @@ Correct Answer: A
 Explanation: Short explanation
 `;
 
-    const quiz = await callGroq(prompt, 1200, 0.6);
+    const quiz = await callGroq(prompt);
     res.json({ quiz });
 
   } catch (err) {
-    console.error("QUIZ ERROR:", err.message);
-    res.status(500).json({ error: "Quiz generation failed" });
+    console.error("QUIZ ERROR FULL:", err.message);
+
+    res.status(500).json({
+      error: "Quiz generation failed",
+      details: err.message
+    });
   }
 });
 
-// ─────────────────────────────
+// --------------------
 // Server Start
-// ─────────────────────────────
+// --------------------
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log("Backend running on port", PORT);
