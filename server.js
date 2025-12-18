@@ -4,9 +4,6 @@ import fetch from "node-fetch";
 
 const app = express();
 
-// ─────────────────────────────
-// Middleware
-// ─────────────────────────────
 app.use(cors());
 app.use(express.json());
 
@@ -18,7 +15,43 @@ app.get("/", (req, res) => {
 });
 
 // ─────────────────────────────
-// ANSWER EVALUATOR
+// Helper: Safe Groq Call
+// ─────────────────────────────
+async function callGroq(prompt, maxTokens = 1000, temperature = 0.5) {
+  const response = await fetch(
+    "https://api.groq.com/openai/v1/chat/completions",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.GROQ_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        messages: [{ role: "user", content: prompt }],
+        temperature,
+        max_tokens: maxTokens
+      })
+    }
+  );
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error("Groq HTTP error: " + text);
+  }
+
+  const data = await response.json();
+
+  // 🔐 SAFETY CHECK
+  if (!data.choices || !Array.isArray(data.choices) || !data.choices[0]) {
+    throw new Error("Invalid Groq response: " + JSON.stringify(data));
+  }
+
+  return data.choices[0].message?.content || "No content generated.";
+}
+
+// ─────────────────────────────
+// Answer Evaluator
 // ─────────────────────────────
 app.post("/evaluate", async (req, res) => {
   try {
@@ -44,47 +77,17 @@ ${answer}
 Evaluate strictly and give feedback with marks.
 `;
 
-    const response = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.GROQ_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.4,
-          max_tokens: 1000
-        })
-      }
-    );
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error("Groq error:", text);
-      return res.status(500).json({ error: "Groq API failed" });
-    }
-
-    const data = await response.json();
-
-    if (!data.choices || !data.choices.length) {
-      return res.status(500).json({ error: "Invalid AI response" });
-    }
-
-    res.json({
-      evaluation: data.choices[0].message.content
-    });
+    const evaluation = await callGroq(prompt, 1000, 0.4);
+    res.json({ evaluation });
 
   } catch (err) {
-    console.error(err);
+    console.error("EVALUATE ERROR:", err.message);
     res.status(500).json({ error: "Evaluation failed" });
   }
 });
 
 // ─────────────────────────────
-// QUIZ GENERATOR
+// Quiz Generator
 // ─────────────────────────────
 app.post("/quiz", async (req, res) => {
   try {
@@ -100,9 +103,9 @@ Generate ${count} UPSC Prelims MCQs.
 Subject: ${subject}
 Difficulty: ${difficulty}
 
-Format EXACTLY like this:
+Format strictly:
 
-Q1. Question text
+Q1. Question
 A) Option
 B) Option
 C) Option
@@ -111,41 +114,11 @@ Correct Answer: A
 Explanation: Short explanation
 `;
 
-    const response = await fetch(
-      "https://api.groq.com/openai/v1/chat/completions",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${process.env.GROQ_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.6,
-          max_tokens: 1200
-        })
-      }
-    );
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error("Groq error:", text);
-      return res.status(500).json({ error: "Groq API failed" });
-    }
-
-    const data = await response.json();
-
-    if (!data.choices || !data.choices.length) {
-      return res.status(500).json({ error: "Invalid AI response" });
-    }
-
-    res.json({
-      quiz: data.choices[0].message.content
-    });
+    const quiz = await callGroq(prompt, 1200, 0.6);
+    res.json({ quiz });
 
   } catch (err) {
-    console.error(err);
+    console.error("QUIZ ERROR:", err.message);
     res.status(500).json({ error: "Quiz generation failed" });
   }
 });
