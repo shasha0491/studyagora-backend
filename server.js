@@ -3,6 +3,7 @@ import cors from "cors";
 import fetch from "node-fetch";
 import dotenv from "dotenv";
 import admin from "firebase-admin";
+import fs from "fs";
 
 dotenv.config();
 
@@ -11,9 +12,11 @@ app.use(cors());
 app.use(express.json());
 
 /* ===============================
-   FIREBASE ADMIN INIT
+   FIREBASE ADMIN INIT (RENDER SAFE)
 ================================ */
-import serviceAccount from "./firebase-admin.json" assert { type: "json" };
+const serviceAccount = JSON.parse(
+  fs.readFileSync("./firebase-admin.json", "utf8")
+);
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -29,7 +32,7 @@ async function requireAuth(req, res, next) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const token = authHeader.split("Bearer ")[1];
+  const token = authHeader.replace("Bearer ", "");
 
   try {
     const decoded = await admin.auth().verifyIdToken(token);
