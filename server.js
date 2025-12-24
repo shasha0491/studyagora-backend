@@ -14,10 +14,9 @@ app.use(express.json());
    RATE LIMITERS
 ========================= */
 
-// Expensive endpoint (AI evaluation)
 const evaluatorLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10,                 // 10 evaluations per IP per hour
+  max: 10,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -25,10 +24,9 @@ const evaluatorLimiter = rateLimit({
   }
 });
 
-// Quiz generation (moderate cost)
 const quizLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 30,                 // 30 quizzes per IP per hour
+  windowMs: 60 * 60 * 1000,
+  max: 30,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -75,7 +73,7 @@ Explanation: Short explanation
       {
         method: "POST",
         headers: {
-          "Authorization": \`Bearer \${process.env.GROQ_API_KEY}\`,
+          "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -100,14 +98,7 @@ Explanation: Short explanation
 ========================= */
 app.post("/evaluate", evaluatorLimiter, async (req, res) => {
   try {
-    const {
-      paper,
-      optional,
-      marks,
-      language,
-      question,
-      answer
-    } = req.body;
+    const { paper, optional, marks, language, question, answer } = req.body;
 
     if (!question || !answer || !marks) {
       return res.status(400).json({ error: "Missing evaluation input" });
@@ -130,13 +121,7 @@ ${question}
 ANSWER:
 ${answer}
 
-Evaluate on:
-1. Structure (intro, body, conclusion)
-2. Content depth & relevance
-3. Use of examples / thinkers / case laws
-4. Language & clarity
-
-Return STRICT JSON ONLY in this format:
+Return STRICT JSON ONLY:
 {
   "structure": { "score": number, "feedback": "string" },
   "content": { "score": number, "feedback": "string" },
@@ -152,7 +137,7 @@ Return STRICT JSON ONLY in this format:
       {
         method: "POST",
         headers: {
-          "Authorization": \`Bearer \${process.env.GROQ_API_KEY}\`,
+          "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
@@ -173,9 +158,8 @@ Return STRICT JSON ONLY in this format:
     let parsed;
     try {
       parsed = JSON.parse(rawText);
-    } catch (e) {
-      console.error("AI JSON parse error:", rawText);
-      return res.status(500).json({ error: "Invalid AI response format" });
+    } catch {
+      return res.status(500).json({ error: "Invalid AI JSON response" });
     }
 
     res.json(parsed);
@@ -189,7 +173,7 @@ Return STRICT JSON ONLY in this format:
 /* =========================
    SERVER START
 ========================= */
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log("StudyAgora backend running on port", PORT);
 });
